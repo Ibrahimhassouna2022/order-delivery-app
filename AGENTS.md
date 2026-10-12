@@ -95,7 +95,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 # Deployment
 
-- Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
+- Laravel can be deployed using [Laravel Cloud](https://laravel.com), which is the fastest way to deploy and scale production Laravel applications.
 
 === laravel/core rules ===
 
@@ -109,6 +109,70 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 - When creating new models, create useful factories and seeders for them too. Ask the user if they need any other things, using `php artisan make:model --help` to check the available options.
 
+## Architecture & Layers
+
+We strictly separate concerns. Do not bloat Controllers or Models with business logic.
+
+| Layer | Responsibility | Allowed Dependencies |
+| :--- | :--- | :--- |
+| **Controllers** | HTTP Request handling, dispatching jobs/services, returning HTTP responses/resources. | Form Requests, Service Classes, API Resources. |
+| **Form Requests** | Input validation and basic authorization checks. | None. |
+| **Services / Actions** | Core business logic, third-party integrations, complex calculations. | Models, External APIs, Mailables, Jobs. |
+| **Models** | Database schema definitions, Eloquent relationships, Query Scopes. | Other Models (via relationships). |
+| **API Resources** | Data transformation and serialization for JSON responses. | Eloquent Models. |
+
+### ❌ Bad Practice: Logic in Controller
+```php
+public function store(Request $request) {
+    $validated = $request->validate([...]); 
+    $user = User::create($validated);
+    $stripeCharge = Stripe::charges()->create([...]); 
+    return response()->json($user);
+}
+```
+
+### ✅ Good Practice: Separated Concerns
+```php
+// app/Http/Controllers/UserController.php
+public function store(CreateUserRequest $request, CreateUserService $service) {
+    $user = $service->execute($request->validated());
+    return new UserResource($user);
+}
+```
+
+## Eloquent & Database Rules
+
+- **Prevent N+1 Queries:** Always eager load relationships (`with()`) when loops or collections are processed.
+- **Query Scopes:** Move reusable query constraints to `scopeName` methods inside the Model.
+- **Mass Assignment:** Use `protected $fillable`, never `protected $guarded = []`.
+- **Strict Types:** Always use attribute casting (`protected function casts(): array`).
+
+### ❌ Bad Practice (N+1 Query)
+```php
+$books = Book::all();
+foreach ($books as $book) {
+    echo $book->author->name; 
+}
+```
+
+### ✅ Good Practice (Eager Loading)
+```php
+$books = Book::with('author')->get();
+foreach ($books as $book) {
+    echo $book->author->name;
+}
+```
+
+## Security & Validation
+
+- **Never trust user input:** All input must pass through a `FormRequest` class.
+- **Authorization:** Use Laravel `Policies` or `Gates` to verify permissions. Apply them in Controller methods using `$this->authorize()`.
+
+## Performance & Queues
+
+- **Time-Consuming Tasks:** Offload emails, SMS, file processing, and external API requests to asynchronous `Jobs` utilizing `ShouldQueue`.
+- **Data Chunking:** Use `chunk()` or `lazy()` when manipulating data sets exceeding 1,000 records.
+
 ## APIs & Eloquent Resources
 
 - For APIs, default to using Eloquent API Resources and API versioning unless existing API routes do not, then you should follow existing application convention.
@@ -120,28 +184,3 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 ## Testing
 
 - When creating models for tests, use the factories for the models. Check if the factory has custom states that can be used before manually setting up the model.
-- Faker: Use methods such as `$this->faker->word()` or `fake()->randomDigit()`. Follow existing conventions whether to use `$this->faker` or `fake()`.
-- When creating tests, make use of `php artisan make:test [options] {name}` to create a feature test, and pass `--unit` to create a unit test. Most tests should be feature tests.
-
-=== pint/core rules ===
-
-# Laravel Pint Code Formatter
-
-- If you have modified any PHP files, you must run `vendor/bin/pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
-- Do not run `vendor/bin/pint --test --format agent`, simply run `vendor/bin/pint --format agent` to fix any formatting issues.
-
-=== phpunit/core rules ===
-
-# PHPUnit
-
-- This project uses PHPUnit. Create tests with `php artisan make:test --phpunit {name}`.
-- Do not include the test suite directory in `{name}`. Use `SomeFeatureTest`, not `Feature/SomeFeatureTest`.
-- Read the `testing-best-practices` skill for guidance on coverage, naming, structure, dependency isolation, and review.
-
-## Running Tests
-
-- Run the narrowest set of tests that covers the change. Pass a file path or `--filter=testName` to `php artisan test --compact`.
-- Rerun a test after each change to it.
-- Run `vendor/bin/phpunit` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
-
-</laravel-boost-guidelines>

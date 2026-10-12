@@ -245,13 +245,19 @@ order types; grocery and pharmacy are candidates for Phase Two after proof of
 concept (intent lines 96-99, 133). The first release target is 2–3 weeks
 (intent line 130); no delivery milestone breakdown is provided.
 
+## Approval status
+
+**Approved.** The MVP scope and requirements in this specification are
+approved. The unresolved decisions below are intentionally deferred to a later
+stage and do not block this approval.
+
 ## Conflicts and open questions
 
 Restaurant onboarding, food-only launch scope, and the initial simplified
 operations console are confirmed decisions, not open questions (intent lines
 96-104).
 
-The following decisions remain unresolved:
+The following decisions remain unresolved and are deferred for later resolution:
 
 - What launch audience size and scale target should performance tests use?
   (intent line 139)

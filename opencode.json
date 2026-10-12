@@ -1,14 +1,53 @@
 {
-    "$schema": "https://opencode.ai/config.json",
-    "mcp": {
-        "laravel-boost": {
-            "type": "local",
-            "enabled": true,
-            "command": [
-                "php",
-                "artisan",
-                "boost:mcp"
-            ]
-        }
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "laravel-boost": {
+      "type": "local",
+      "enabled": true,
+      "command": [
+        "php",
+        "artisan",
+        "boost:mcp"
+      ]
     }
+  },
+  "provider": {
+    "omniroute": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "OmniRoute",
+      "options": {
+        "baseURL": "http://localhost:20128/v1",
+        "apiKey": "sk-d6dbaec75dede202-a15ae5-906f48c7"
+      },
+      "models": {
+        "gc/grok-build": {
+          "name": "gc/grok-build"
+        },
+        "antigravity/claude-opus-4-6-thinking": {
+          "name": "antigravity/claude-opus-4-6-thinking"
+        },
+        "antigravity/claude-sonnet-4-6": {
+          "name": "antigravity/claude-sonnet-4-6"
+        },
+        "antigravity/gemini-2.5-flash": {
+          "name": "antigravity/gemini-2.5-flash"
+        },
+        "antigravity/gpt-oss-120b-medium": {
+          "name": "antigravity/gpt-oss-120b-medium"
+        },
+        "antigravity/gemini-pro-agent": {
+          "name": "antigravity/gemini-pro-agent"
+        },
+        "cu/gpt-5.5-none-fast": {
+          "name": "cu/gpt-5.5-none-fast"
+        },
+        "cu/gpt-5.5-low-fast": {
+          "name": "cu/gpt-5.5-low-fast"
+        },
+        "cu/gpt-5.3-codex-low": {
+          "name": "cu/gpt-5.3-codex-low"
+        }
+      }
+    }
+  }
 }

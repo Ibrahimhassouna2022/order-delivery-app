@@ -42,4 +42,30 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    /**
+     * Indicate that the account is an anonymous guest (FR-030).
+     */
+    public function guest(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'name' => 'Guest',
+            'email' => null,
+            'email_verified_at' => null,
+            'password' => null,
+            'is_guest' => true,
+        ]);
+    }
+
+    /**
+     * Indicate that the account has a validated deletion request pending
+     * the personal data purge window (FR-035 / SC-011).
+     */
+    public function pendingDeletion(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'deletion_requested_at' => now(),
+            'anonymized_at' => null,
+        ]);
+    }
 }
