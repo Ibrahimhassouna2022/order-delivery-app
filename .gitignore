@@ -27,3 +27,4 @@ Homestead.yaml
 Thumbs.db
 /.agents/mcp_config.json
 /scratch/
+/.mcp.json
