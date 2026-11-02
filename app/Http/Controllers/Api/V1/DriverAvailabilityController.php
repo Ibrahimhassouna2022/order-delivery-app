@@ -7,10 +7,23 @@ use App\Actions\Driver\SetDriverAvailabilityAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Driver\SetDriverAvailabilityRequest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class DriverAvailabilityController extends Controller
 {
+    public function show(Request $request): JsonResponse
+    {
+        $profile = $request->user()->driverProfile;
+
+        return response()->json([
+            'data' => [
+                'is_available' => (bool) ($profile?->is_available ?? false),
+                'availability_updated_at' => $profile?->availability_updated_at?->toISOString(),
+            ],
+        ]);
+    }
+
     public function update(
         SetDriverAvailabilityRequest $request,
         SetDriverAvailabilityAction $setAvailability,

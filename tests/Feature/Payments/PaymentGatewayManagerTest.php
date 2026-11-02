@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Payments;
 
+use App\Actions\Payment\BankTransferGateway;
 use App\Actions\Payment\CashOnDeliveryGateway;
 use App\Actions\Payment\PaymentGatewayManager;
 use App\Actions\Payment\PaymentProviderUnavailableException;
@@ -14,10 +15,15 @@ class PaymentGatewayManagerTest extends TestCase
     {
         $manager = $this->app->make(PaymentGatewayManager::class);
 
-        $this->assertSame([PaymentMethod::CashOnDelivery], $manager->enabledMethods());
+        $this->assertSame(
+            [PaymentMethod::CashOnDelivery, PaymentMethod::BankTransfer],
+            $manager->enabledMethods(),
+        );
         $this->assertTrue($manager->isEnabled(PaymentMethod::CashOnDelivery));
+        $this->assertTrue($manager->isEnabled(PaymentMethod::BankTransfer));
         $this->assertFalse($manager->isEnabled(PaymentMethod::Card));
         $this->assertInstanceOf(CashOnDeliveryGateway::class, $manager->default());
+        $this->assertInstanceOf(BankTransferGateway::class, $manager->for(PaymentMethod::BankTransfer));
         $this->assertSame(PaymentMethod::CashOnDelivery, $manager->default()->method());
     }
 

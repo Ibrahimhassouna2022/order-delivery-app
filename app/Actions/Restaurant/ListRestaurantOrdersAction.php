@@ -20,7 +20,15 @@ class ListRestaurantOrdersAction
         $restaurantIds = $user->restaurants()->pluck('restaurants.id');
 
         return Order::query()
-            ->with(['customer', 'items', 'restaurant'])
+            ->with([
+                'customer',
+                'items',
+                'restaurant',
+                'deliveryLocation',
+                'deliveryZone',
+                'paymentAttempts.reviewedBy',
+                'activeAssignment.driver.driverProfile',
+            ])
             ->whereIn('restaurant_id', $restaurantIds)
             ->when($restaurantId !== null, fn (Builder $query) => $query
                 ->where('restaurant_id', $restaurantId))

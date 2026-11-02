@@ -2,9 +2,12 @@
 
 namespace App\Actions\Order;
 
+use App\Actions\Driver\DispatchLeastLoadedDriverAction;
 use App\Actions\Notification\Notifier;
+use App\Actions\Payment\PaymentGateway;
 use App\Actions\Payment\PaymentGatewayManager;
 use App\Enums\OrderStatus;
+use App\Enums\PaymentMethod;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -16,12 +19,19 @@ class PlaceFoodOrderAction
         private BuildFoodOrderQuoteAction $buildQuote,
         private PaymentGatewayManager $paymentGateways,
         private Notifier $notifier,
+        private ?DispatchLeastLoadedDriverAction $dispatchLeastLoadedDriver = null,
     ) {}
 
     /**
      * @param  array{
      *   restaurant_id: int,
-     *   delivery_location_id: int,
+     *   delivery_location_id?: int|null,
+     *   delivery_zone_id?: int|null,
+     *   delivery_address?: string|null,
+     *   delivery_phone?: string|null,
+     *   fulfillment_type?: string,
+     *   notes?: string|null,
+     *   payment_method?: string|null,
      *   items: list<array{menu_item_id: int, quantity: int}>,
      *   idempotency_key: string
      * }  $validatedData
@@ -40,11 +50,28 @@ class PlaceFoodOrderAction
                 }
 
                 $quote = $this->buildQuote->execute($customer, $validatedData);
+                $deliveryLocationId = $quote['delivery_location_id'];
+
+                if ($quote['fulfillment_type'] === 'delivery' && $deliveryLocationId === null) {
+                    $location = $customer->deliveryLocations()->create([
+                        'label' => 'عنوان التوصيل',
+                        'address' => $quote['delivery_address'],
+                        'delivery_instructions' => $quote['notes'],
+                        'is_default' => false,
+                    ]);
+                    $deliveryLocationId = $location->id;
+                }
+
                 $order = $customer->customerOrders()->create([
                     'restaurant_id' => $quote['restaurant_id'],
-                    'delivery_location_id' => $quote['delivery_location_id'],
+                    'delivery_location_id' => $deliveryLocationId,
                     'type' => 'food',
                     'status' => OrderStatus::Placed,
+                    'fulfillment_type' => $quote['fulfillment_type'],
+                    'delivery_zone_id' => $quote['delivery_zone_id'],
+                    'delivery_address' => $quote['delivery_address'],
+                    'delivery_phone' => $quote['delivery_phone'],
+                    'notes' => $quote['notes'],
                     'idempotency_key' => $validatedData['idempotency_key'],
                     'idempotency_hash' => $requestHash,
                     'currency_code' => $quote['currency_code'],
@@ -55,14 +82,26 @@ class PlaceFoodOrderAction
                 ]);
 
                 $order->items()->createMany($quote['items']);
-                $this->paymentGateways->default()->recordIntent($order);
 
-                // Broadcasts after commit (OrderPlaced → ShouldDispatchAfterCommit)
+                $gateway = $this->resolveGateway($validatedData['payment_method'] ?? null);
+                $gateway->recordIntent($order);
+
+                // Broadcasts after commit (OrderPlaced -> ShouldDispatchAfterCommit)
                 // so restaurant members and operations never see a rolled-back order.
                 $this->notifier->orderPlaced($order);
 
+                if ($order->fulfillment_type === 'delivery' && $this->dispatchLeastLoadedDriver !== null) {
+                    $this->dispatchLeastLoadedDriver->execute($order);
+                }
+
                 return [
-                    'order' => $order->load(['items', 'paymentAttempts']),
+                    'order' => $order->load([
+                        'restaurant',
+                        'deliveryLocation',
+                        'deliveryZone',
+                        'items',
+                        'paymentAttempts.reviewedBy',
+                    ]),
                     'created' => true,
                 ];
             }, attempts: 3);
@@ -80,7 +119,13 @@ class PlaceFoodOrderAction
     /**
      * @param  array{
      *   restaurant_id: int,
-     *   delivery_location_id: int,
+     *   delivery_location_id?: int|null,
+     *   delivery_zone_id?: int|null,
+     *   delivery_address?: string|null,
+     *   delivery_phone?: string|null,
+     *   fulfillment_type?: string,
+     *   notes?: string|null,
+     *   payment_method?: string|null,
      *   items: list<array{menu_item_id: int, quantity: int}>,
      *   idempotency_key: string
      * }  $validatedData
@@ -98,7 +143,17 @@ class PlaceFoodOrderAction
 
         return hash('sha256', json_encode([
             'restaurant_id' => (int) $validatedData['restaurant_id'],
-            'delivery_location_id' => (int) $validatedData['delivery_location_id'],
+            'delivery_location_id' => isset($validatedData['delivery_location_id'])
+                ? (int) $validatedData['delivery_location_id']
+                : null,
+            'delivery_zone_id' => isset($validatedData['delivery_zone_id'])
+                ? (int) $validatedData['delivery_zone_id']
+                : null,
+            'delivery_address' => $validatedData['delivery_address'] ?? null,
+            'delivery_phone' => $validatedData['delivery_phone'] ?? null,
+            'fulfillment_type' => $validatedData['fulfillment_type'] ?? 'delivery',
+            'notes' => $validatedData['notes'] ?? null,
+            'payment_method' => $validatedData['payment_method'] ?? null,
             'items' => $items,
         ], JSON_THROW_ON_ERROR));
     }
@@ -107,8 +162,25 @@ class PlaceFoodOrderAction
     {
         return $customer->customerOrders()
             ->where('idempotency_key', $idempotencyKey)
-            ->with(['items', 'paymentAttempts'])
+            ->with([
+                'restaurant',
+                'deliveryLocation',
+                'deliveryZone',
+                'items',
+                'paymentAttempts.reviewedBy',
+            ])
             ->first();
+    }
+
+    private function resolveGateway(?string $requestedMethod): PaymentGateway
+    {
+        $method = PaymentMethod::tryFrom((string) $requestedMethod);
+
+        if ($method !== null && $this->paymentGateways->isEnabled($method)) {
+            return $this->paymentGateways->for($method);
+        }
+
+        return $this->paymentGateways->default();
     }
 
     /**

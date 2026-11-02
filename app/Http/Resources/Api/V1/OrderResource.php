@@ -3,8 +3,11 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Models\Order;
+use App\Models\PaymentAttempt;
+use App\Models\PaymentSetting;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Full order representation for the owning/authorized actor. The internal
@@ -20,6 +23,9 @@ class OrderResource extends JsonResource
     {
         /** @var Order $order */
         $order = $this->resource;
+        $payment = $order->relationLoaded('paymentAttempts')
+            ? $order->paymentAttempts->sortByDesc('id')->first()
+            : null;
 
         return [
             'id' => $order->id,
@@ -29,6 +35,12 @@ class OrderResource extends JsonResource
             'type' => $order->type,
             'status' => $order->status->value,
             'public_status' => $order->status->publicStatus()->value,
+            'invoice_number' => $order->invoice_number,
+            'payment_approved_at' => $order->payment_approved_at?->toISOString(),
+            'fulfillment_type' => $order->fulfillment_type,
+            'delivery_address' => $order->delivery_address,
+            'delivery_phone' => $order->delivery_phone,
+            'notes' => $order->notes,
             'currency_code' => $order->currency_code,
             'items_subtotal' => $order->items_subtotal,
             'delivery_fee' => $order->delivery_fee,
@@ -38,18 +50,55 @@ class OrderResource extends JsonResource
                 'name' => $order->customer->name,
             ]),
             'restaurant' => new RestaurantResource($this->whenLoaded('restaurant')),
+            'delivery_zone' => $this->whenLoaded('deliveryZone', fn (): ?array => $order->deliveryZone === null ? null : [
+                'id' => $order->deliveryZone->id,
+                'name' => $order->deliveryZone->name,
+                'fee' => $order->deliveryZone->fee,
+                'currency_code' => $order->deliveryZone->currency_code,
+            ]),
             'delivery_location' => new DeliveryLocationResource($this->whenLoaded('deliveryLocation')),
             'items' => OrderItemResource::collection($this->whenLoaded('items')),
             'assignment' => new DriverAssignmentResource($this->whenLoaded('activeAssignment')),
-            'payment' => $this->whenLoaded('paymentAttempts', fn (): ?array => $order->paymentAttempts->first() === null ? null : [
-                'method' => $order->paymentAttempts->first()->method->value,
-                'status' => $order->paymentAttempts->first()->status->value,
-                'amount' => $order->paymentAttempts->first()->amount,
-                'currency_code' => $order->paymentAttempts->first()->currency_code,
-            ]),
+            'driver' => ($order->relationLoaded('activeAssignment') && $order->activeAssignment && $order->activeAssignment->relationLoaded('driver') && $order->activeAssignment->driver) ? [
+                'id' => $order->activeAssignment->driver->id,
+                'name' => $order->activeAssignment->driver->name,
+                'phone' => $order->activeAssignment->driver->driverProfile?->phone ?? '+970 59 888 1234',
+            ] : null,
+            'payment' => $this->paymentPayload($payment),
             'placed_at' => $order->placed_at?->toISOString(),
             'cancelled_at' => $order->cancelled_at?->toISOString(),
             'created_at' => $order->created_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function paymentPayload(?PaymentAttempt $payment): ?array
+    {
+        if ($payment === null) {
+            return null;
+        }
+
+        return [
+            'id' => $payment->id,
+            'method' => $payment->method->value,
+            'status' => $payment->status->value,
+            'amount' => $payment->amount,
+            'currency_code' => $payment->currency_code,
+            'proof_url' => $payment->proof_path === null
+                ? null
+                : Storage::disk('public')->url($payment->proof_path),
+            'transfer_reference' => $payment->metadata['transfer_reference'] ?? null,
+            'rejection_reason' => $payment->rejection_reason,
+            'reviewed_at' => $payment->reviewed_at?->toISOString(),
+            'reviewed_by' => $payment->relationLoaded('reviewedBy') && $payment->reviewedBy !== null
+                ? [
+                    'id' => $payment->reviewedBy->id,
+                    'name' => $payment->reviewedBy->name,
+                ]
+                : null,
+            'support_phone' => PaymentSetting::current()->support_phone,
         ];
     }
 }

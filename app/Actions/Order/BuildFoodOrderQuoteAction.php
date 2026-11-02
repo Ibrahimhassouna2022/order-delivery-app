@@ -3,8 +3,10 @@
 namespace App\Actions\Order;
 
 use App\Actions\Payment\PaymentGatewayManager;
+use App\Enums\PaymentMethod;
 use App\Enums\RestaurantStatus;
 use App\Models\DeliveryLocation;
+use App\Models\DeliveryZone;
 use App\Models\MenuItem;
 use App\Models\Restaurant;
 use App\Models\User;
@@ -21,12 +23,24 @@ class BuildFoodOrderQuoteAction
     /**
      * @param  array{
      *   restaurant_id: int,
-     *   delivery_location_id: int,
+     *   delivery_location_id?: int|null,
+     *   delivery_zone_id?: int|null,
+     *   delivery_address?: string|null,
+     *   delivery_phone?: string|null,
+     *   fulfillment_type?: string,
+     *   notes?: string|null,
+     *   payment_method?: string|null,
      *   items: list<array{menu_item_id: int, quantity: int}>
      * }  $validatedData
      * @return array{
      *   restaurant_id: int,
-     *   delivery_location_id: int,
+     *   delivery_location_id: int|null,
+     *   delivery_zone_id: int|null,
+     *   delivery_zone: array{id: int, name: string, fee: string}|null,
+     *   delivery_address: string|null,
+     *   delivery_phone: string|null,
+     *   fulfillment_type: string,
+     *   notes: string|null,
      *   currency_code: string,
      *   payment_method: string,
      *   items_subtotal: string,
@@ -48,15 +62,42 @@ class BuildFoodOrderQuoteAction
                 ]);
             }
 
-            $location = DeliveryLocation::query()
-                ->whereBelongsTo($customer)
-                ->lockForUpdate()
-                ->find($validatedData['delivery_location_id']);
+            $fulfillmentType = $validatedData['fulfillment_type'] ?? 'delivery';
+            $location = null;
+            $zone = null;
 
-            if ($location === null) {
-                throw ValidationException::withMessages([
-                    'delivery_location_id' => 'The selected delivery location is not available.',
-                ]);
+            if ($fulfillmentType === 'delivery') {
+                if (! empty($validatedData['delivery_location_id'])) {
+                    $location = DeliveryLocation::query()
+                        ->whereBelongsTo($customer)
+                        ->lockForUpdate()
+                        ->find($validatedData['delivery_location_id']);
+
+                    if ($location === null) {
+                        throw ValidationException::withMessages([
+                            'delivery_location_id' => 'The selected delivery location is not available.',
+                        ]);
+                    }
+                }
+
+                if (! empty($validatedData['delivery_zone_id'])) {
+                    $zone = DeliveryZone::query()
+                        ->where('is_active', true)
+                        ->lockForUpdate()
+                        ->find($validatedData['delivery_zone_id']);
+
+                    if ($zone === null) {
+                        throw ValidationException::withMessages([
+                            'delivery_zone_id' => 'The selected delivery zone is not available.',
+                        ]);
+                    }
+                }
+
+                if ($location === null && $zone === null) {
+                    throw ValidationException::withMessages([
+                        'delivery_zone_id' => 'A delivery zone or saved delivery location is required.',
+                    ]);
+                }
             }
 
             $menuItems = MenuItem::query()
@@ -116,31 +157,72 @@ class BuildFoodOrderQuoteAction
                 ]);
             }
 
-            $fixedFees = config('delivery.pricing.fixed_fees');
-
-            if (! is_array($fixedFees) || ! array_key_exists($currencyCode, $fixedFees)) {
-                throw new DeliveryPricingUnavailableException('Order pricing is not configured.');
+            if ($zone !== null && $zone->currency_code !== $currencyCode) {
+                throw ValidationException::withMessages([
+                    'delivery_zone_id' => 'The selected delivery zone does not support this order currency.',
+                ]);
             }
 
-            $deliveryFee = $this->toMilliunits((string) $fixedFees[$currencyCode], allowZero: true);
+            $deliveryFee = $this->resolveDeliveryFee($fulfillmentType, $zone, $currencyCode);
 
             if ($deliveryFee > self::MAX_AMOUNT_IN_MILLIUNITS - $itemsSubtotal) {
                 throw new LogicException('Configured delivery pricing exceeds the supported amount.');
             }
 
             $total = $itemsSubtotal + $deliveryFee;
+            $paymentMethod = $this->resolvePaymentMethod($validatedData['payment_method'] ?? null);
 
             return [
                 'restaurant_id' => $restaurant->id,
-                'delivery_location_id' => $location->id,
+                'delivery_location_id' => $location?->id,
+                'delivery_zone_id' => $zone?->id,
+                'delivery_zone' => $zone === null ? null : [
+                    'id' => $zone->id,
+                    'name' => $zone->name,
+                    'fee' => $zone->fee,
+                ],
+                'delivery_address' => $validatedData['delivery_address'] ?? $location?->address,
+                'delivery_phone' => $validatedData['delivery_phone'] ?? null,
+                'fulfillment_type' => $fulfillmentType,
+                'notes' => $validatedData['notes'] ?? null,
                 'currency_code' => $currencyCode,
-                'payment_method' => $this->paymentGateways->default()->method()->value,
+                'payment_method' => $paymentMethod->value,
                 'items_subtotal' => $this->fromMilliunits($itemsSubtotal),
                 'delivery_fee' => $this->fromMilliunits($deliveryFee),
                 'total' => $this->fromMilliunits($total),
                 'items' => $quoteItems,
             ];
         }, attempts: 3);
+    }
+
+    private function resolveDeliveryFee(string $fulfillmentType, ?DeliveryZone $zone, string $currencyCode): int
+    {
+        if ($fulfillmentType === 'pickup') {
+            return 0;
+        }
+
+        if ($zone !== null) {
+            return $this->toMilliunits((string) $zone->fee, allowZero: true);
+        }
+
+        $fixedFees = config('delivery.pricing.fixed_fees');
+
+        if (! is_array($fixedFees) || ! array_key_exists($currencyCode, $fixedFees)) {
+            throw new DeliveryPricingUnavailableException('Order pricing is not configured.');
+        }
+
+        return $this->toMilliunits((string) $fixedFees[$currencyCode], allowZero: true);
+    }
+
+    private function resolvePaymentMethod(?string $requestedMethod): PaymentMethod
+    {
+        $requested = PaymentMethod::tryFrom((string) $requestedMethod);
+
+        if ($requested !== null && $this->paymentGateways->isEnabled($requested)) {
+            return $requested;
+        }
+
+        return $this->paymentGateways->default()->method();
     }
 
     private function toMilliunits(string $amount, bool $allowZero = false): int

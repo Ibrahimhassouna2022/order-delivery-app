@@ -32,4 +32,14 @@ class NullNotifier implements Notifier
     {
         //
     }
+
+    public function paymentProofSubmitted(Order $order): void
+    {
+        //
+    }
+
+    public function paymentReviewed(Order $order, bool $approved, ?string $reason = null): void
+    {
+        //
+    }
 }

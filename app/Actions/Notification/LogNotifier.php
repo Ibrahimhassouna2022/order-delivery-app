@@ -52,4 +52,23 @@ class LogNotifier implements Notifier
             'currency_code' => $entry->currency_code,
         ]);
     }
+
+    public function paymentProofSubmitted(Order $order): void
+    {
+        Log::info('Bank transfer proof submitted.', [
+            'order_id' => $order->id,
+            'restaurant_id' => $order->restaurant_id,
+            'customer_id' => $order->customer_id,
+        ]);
+    }
+
+    public function paymentReviewed(Order $order, bool $approved, ?string $reason = null): void
+    {
+        Log::info('Bank transfer payment reviewed.', [
+            'order_id' => $order->id,
+            'approved' => $approved,
+            'invoice_number' => $order->invoice_number,
+            'reason' => $reason,
+        ]);
+    }
 }

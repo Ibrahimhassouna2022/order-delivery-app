@@ -15,8 +15,11 @@ class GetCustomerOrderAction
         return $order->load([
             'restaurant',
             'deliveryLocation',
+            'deliveryZone',
             'items',
+            'paymentAttempts',
             'activeAssignment.driver.driverLocation',
+            'activeAssignment.driver.driverProfile',
         ]);
     }
 }

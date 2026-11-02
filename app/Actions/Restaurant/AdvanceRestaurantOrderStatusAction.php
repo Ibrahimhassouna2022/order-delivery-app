@@ -2,7 +2,9 @@
 
 namespace App\Actions\Restaurant;
 
+use App\Actions\Driver\DispatchLeastLoadedDriverAction;
 use App\Actions\Notification\Notifier;
+use App\Enums\DriverAssignmentStatus;
 use App\Enums\OrderStatus;
 use App\Models\Order;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +16,10 @@ use Illuminate\Support\Facades\DB;
  */
 class AdvanceRestaurantOrderStatusAction
 {
-    public function __construct(private Notifier $notifier) {}
+    public function __construct(
+        private Notifier $notifier,
+        private DispatchLeastLoadedDriverAction $dispatchLeastLoadedDriver,
+    ) {}
 
     public function execute(Order $order, string $target): Order
     {
@@ -38,11 +43,35 @@ class AdvanceRestaurantOrderStatusAction
                 throw new OrderStatusConflictException('This order step is out of sequence.');
             }
 
+            $usesBankTransfer = $locked->paymentAttempts()
+                ->where('method', \App\Enums\PaymentMethod::BankTransfer)
+                ->exists();
+
+            if ($usesBankTransfer && $locked->payment_approved_at === null) {
+                throw new OrderStatusConflictException('The bank transfer must be approved before accepting this order.');
+            }
+
             $locked->update(['status' => $targetStatus]);
 
             // Broadcasts after commit (ShouldDispatchAfterCommit) so restaurant
             // members and the customer never observe a rolled-back state.
             $this->notifier->orderStatusChanged($locked);
+
+            if (
+                $locked->fulfillment_type === 'delivery'
+                && $this->dispatchLeastLoadedDriver !== null
+                && ! $locked->driverAssignments()->whereIn('status', [
+                    DriverAssignmentStatus::Offered,
+                    DriverAssignmentStatus::Accepted,
+                    DriverAssignmentStatus::PickedUp,
+                ])->exists()
+            ) {
+                try {
+                    $this->dispatchLeastLoadedDriver->execute($locked);
+                } catch (\Throwable) {
+                    // Ignore if no eligible driver at this moment
+                }
+            }
 
             return $locked->refresh();
         }, attempts: 3);

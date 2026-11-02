@@ -41,6 +41,19 @@ class OrderPolicy
     }
 
     /**
+     * Review a manual bank-transfer receipt. The owning restaurant or an
+     * administrator may approve/reject it.
+     */
+    public function reviewPayment(User $user, Order $order): bool
+    {
+        if ($user->role === UserRole::Admin) {
+            return true;
+        }
+
+        return $user->restaurants()->whereKey($order->restaurant_id)->exists();
+    }
+
+    /**
      * Cancel an order (FR-041). A customer may cancel only before any active
      * assignment exists; admin/operations may cancel until delivery.
      */

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Operations;
 
 use App\Actions\Driver\CreateDriverOfferAction;
-use App\Actions\Driver\DispatchClosestDriverAction;
+use App\Actions\Driver\DispatchLeastLoadedDriverAction;
 use App\Actions\Driver\DriverWorkflowConflictException;
 use App\Actions\Driver\ExpireDriverOfferAction;
 use App\Http\Controllers\Controller;
@@ -58,9 +58,9 @@ class DriverDispatchController extends Controller
     public function dispatch(
         DispatchOrderRequest $request,
         Order $order,
-        DispatchClosestDriverAction $dispatchClosestDriver,
+        DispatchLeastLoadedDriverAction $dispatchLeastLoadedDriver,
     ): JsonResponse {
-        $assignment = $dispatchClosestDriver->execute(
+        $assignment = $dispatchLeastLoadedDriver->execute(
             $order,
             $request->validated('exclude_driver_user_ids', []),
         );

@@ -7,13 +7,13 @@ use App\Models\DriverAssignment;
 use App\Models\Order;
 
 /**
- * Creates the next driver offer by selecting the closest available driver and
- * scheduling its 30 s expiry (FR-015/FR-016/FR-017).
+ * Creates the next driver offer for the available driver with the fewest
+ * completed deliveries and schedules its 30 s expiry (FR-015/FR-016/FR-017).
  */
-class DispatchClosestDriverAction
+class DispatchLeastLoadedDriverAction
 {
     public function __construct(
-        private FindClosestAvailableDriverAction $findClosestDriver,
+        private FindLeastLoadedAvailableDriverAction $findLeastLoadedDriver,
         private CreateDriverOfferAction $createOffer,
     ) {}
 
@@ -22,17 +22,7 @@ class DispatchClosestDriverAction
      */
     public function execute(Order $order, array $excludeDriverUserIds = []): ?DriverAssignment
     {
-        $restaurant = $order->restaurant;
-
-        if ($restaurant->latitude === null || $restaurant->longitude === null) {
-            return null;
-        }
-
-        $candidate = $this->findClosestDriver->execute(
-            (float) $restaurant->latitude,
-            (float) $restaurant->longitude,
-            $excludeDriverUserIds,
-        );
+        $candidate = $this->findLeastLoadedDriver->execute($excludeDriverUserIds);
 
         if ($candidate === null) {
             return null;
@@ -40,7 +30,7 @@ class DispatchClosestDriverAction
 
         ['assignment' => $assignment, 'created' => $created] = $this->createOffer->execute($order, [
             'driver_user_id' => $candidate['driver']->id,
-            'distance_meters' => $candidate['distance_meters'],
+            'distance_meters' => null,
             'fare' => $order->delivery_fee,
         ]);
 

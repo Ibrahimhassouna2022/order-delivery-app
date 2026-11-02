@@ -13,7 +13,7 @@ class ExpireDriverOfferAction
 {
     public function __construct(
         private Notifier $notifier,
-        private DispatchClosestDriverAction $dispatchClosestDriver,
+        private DispatchLeastLoadedDriverAction $dispatchLeastLoadedDriver,
     ) {}
 
     public function execute(DriverAssignment $routeAssignment): DriverAssignment
@@ -61,12 +61,18 @@ class ExpireDriverOfferAction
     }
 
     /**
-     * Offer the order to the next closest driver, excluding every driver who
+     * Offer the order to the next available driver with the fewest completed
+     * deliveries, excluding every driver who
      * has already been offered it (FR-016).
      */
     private function reOffer(Order $order): void
     {
-        if (! in_array($order->status, [OrderStatus::Placed, OrderStatus::ReadyForPickup], true)) {
+        if (! in_array($order->status, [
+            OrderStatus::Placed,
+            OrderStatus::RestaurantAccepted,
+            OrderStatus::Preparing,
+            OrderStatus::ReadyForPickup,
+        ], true)) {
             return;
         }
 
@@ -75,6 +81,6 @@ class ExpireDriverOfferAction
             ->pluck('driver_user_id')
             ->all();
 
-        $this->dispatchClosestDriver->execute($order->refresh(), $alreadyOfferedDriverIds);
+        $this->dispatchLeastLoadedDriver->execute($order->refresh(), $alreadyOfferedDriverIds);
     }
 }

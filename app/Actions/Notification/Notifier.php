@@ -21,4 +21,8 @@ interface Notifier
     public function driverOfferExpired(DriverAssignment $assignment): void;
 
     public function driverPayoutCompleted(DriverWalletLedgerEntry $entry): void;
+
+    public function paymentProofSubmitted(Order $order): void;
+
+    public function paymentReviewed(Order $order, bool $approved, ?string $reason = null): void;
 }

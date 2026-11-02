@@ -25,6 +25,8 @@ class ListOrdersAction
                 'restaurant',
                 'customer',
                 'deliveryLocation',
+                'deliveryZone',
+                'paymentAttempts.reviewedBy',
                 'activeAssignment.driver',
                 'items',
             ])

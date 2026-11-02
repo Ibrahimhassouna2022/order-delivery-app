@@ -24,11 +24,29 @@ use App\Http\Resources\Api\V1\OrderTrackingResource;
 use App\Http\Resources\Api\V1\RatingResource;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 class CustomerOrderController extends Controller
 {
+    public function index(Request $request): AnonymousResourceCollection
+    {
+        $orders = $request->user()->customerOrders()
+            ->with([
+                'restaurant',
+                'deliveryLocation',
+                'deliveryZone',
+                'items',
+                'paymentAttempts.reviewedBy',
+                'activeAssignment.driver.driverProfile',
+            ])
+            ->latest('id')
+            ->get();
+
+        return CustomerOrderResource::collection($orders);
+    }
     public function quote(
         QuoteFoodOrderRequest $request,
         BuildFoodOrderQuoteAction $buildQuote,

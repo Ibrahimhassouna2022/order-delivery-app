@@ -190,6 +190,38 @@ class DriverLifecycleControllerTest extends TestCase
         $this->assertDatabaseCount('driver_wallet_ledger_entries', 0);
     }
 
+    public function test_driver_can_expire_their_own_timed_out_offer(): void
+    {
+        $context = $this->createDispatchContext();
+        $assignment = $this->createOffer($context);
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($context['driver_token'])
+            ->postJson("/api/v1/driver/offers/{$assignment->id}/expire")
+            ->assertOk()
+            ->assertJsonPath('data.status', DriverAssignmentStatus::Expired->value);
+
+        $this->assertDatabaseHas('driver_assignments', [
+            'id' => $assignment->id,
+            'status' => DriverAssignmentStatus::Expired->value,
+        ]);
+    }
+
+    public function test_driver_cannot_expire_another_drivers_offer(): void
+    {
+        $context = $this->createDispatchContext();
+        $assignment = $this->createOffer($context);
+
+        $otherDriver = User::factory()->create(['role' => UserRole::Driver]);
+        DriverProfile::factory()->for($otherDriver)->create(['is_available' => true]);
+        $otherToken = $otherDriver->createToken('test')->plainTextToken;
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($otherToken)
+            ->postJson("/api/v1/driver/offers/{$assignment->id}/expire")
+            ->assertForbidden();
+    }
+
     public function test_admin_can_expire_a_pending_offer_without_advancing_the_order(): void
     {
         $context = $this->createDispatchContext();

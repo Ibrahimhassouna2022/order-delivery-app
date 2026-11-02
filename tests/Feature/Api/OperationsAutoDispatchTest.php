@@ -17,11 +17,11 @@ class OperationsAutoDispatchTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_admin_can_auto_dispatch_an_order_to_the_closest_driver(): void
+    public function test_admin_can_auto_dispatch_an_order_to_the_least_loaded_driver(): void
     {
         $admin = User::factory()->create(['role' => UserRole::Admin]);
-        $near = $this->createAvailableDriverAt(31.9005, 35.2005);
-        $this->createAvailableDriverAt(31.9500, 35.2500);
+        $leastLoaded = $this->createAvailableDriver(completedDeliveries: 2);
+        $this->createAvailableDriver(completedDeliveries: 9);
 
         $restaurant = Restaurant::factory()->create(['latitude' => 31.9000, 'longitude' => 35.2000]);
         $order = Order::factory()->create([
@@ -39,7 +39,7 @@ class OperationsAutoDispatchTest extends TestCase
 
         $this->assertDatabaseHas('driver_assignments', [
             'order_id' => $order->id,
-            'driver_user_id' => $near->id,
+            'driver_user_id' => $leastLoaded->id,
             'status' => DriverAssignmentStatus::Offered->value,
         ]);
     }
@@ -77,8 +77,8 @@ class OperationsAutoDispatchTest extends TestCase
     public function test_excluded_drivers_are_not_selected(): void
     {
         $admin = User::factory()->create(['role' => UserRole::Admin]);
-        $near = $this->createAvailableDriverAt(31.9005, 35.2005);
-        $far = $this->createAvailableDriverAt(31.9500, 35.2500);
+        $leastLoaded = $this->createAvailableDriver(completedDeliveries: 2);
+        $nextDriver = $this->createAvailableDriver(completedDeliveries: 7);
 
         $restaurant = Restaurant::factory()->create(['latitude' => 31.9000, 'longitude' => 35.2000]);
         $order = Order::factory()->create([
@@ -90,28 +90,29 @@ class OperationsAutoDispatchTest extends TestCase
 
         $this->withToken($admin->createToken('admin')->plainTextToken)
             ->postJson("/api/v1/operations/orders/{$order->id}/dispatch", [
-                'exclude_driver_user_ids' => [$near->id],
+                'exclude_driver_user_ids' => [$leastLoaded->id],
             ])
             ->assertCreated();
 
         $this->assertDatabaseHas('driver_assignments', [
             'order_id' => $order->id,
-            'driver_user_id' => $far->id,
+            'driver_user_id' => $nextDriver->id,
         ]);
     }
 
-    private function createAvailableDriverAt(float $latitude, float $longitude): User
+    private function createAvailableDriver(int $completedDeliveries = 0): User
     {
         $driver = User::factory()->create(['role' => UserRole::Driver]);
 
         DriverProfile::factory()->for($driver)->create([
             'is_available' => true,
             'availability_updated_at' => now(),
+            'completed_deliveries_count' => $completedDeliveries,
         ]);
 
         DriverLocation::factory()->for($driver, 'driver')->create([
-            'latitude' => $latitude,
-            'longitude' => $longitude,
+            'latitude' => 31.9000,
+            'longitude' => 35.2000,
             'recorded_at' => now(),
         ]);
 

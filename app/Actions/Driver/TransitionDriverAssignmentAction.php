@@ -26,7 +26,7 @@ class TransitionDriverAssignmentAction
             $routeAssignment,
             DriverAssignmentStatus::Accepted,
             DriverAssignmentStatus::PickedUp,
-            OrderStatus::Assigned,
+            [OrderStatus::Assigned, OrderStatus::ReadyForPickup],
             OrderStatus::PickedUp,
         ));
     }
@@ -60,6 +60,7 @@ class TransitionDriverAssignmentAction
     }
 
     /**
+     * @param  OrderStatus|list<OrderStatus>  $requiredOrderStatus
      * @return array{assignment: DriverAssignment, changed: bool}
      */
     private function transition(
@@ -67,7 +68,7 @@ class TransitionDriverAssignmentAction
         DriverAssignment $routeAssignment,
         DriverAssignmentStatus $requiredStatus,
         DriverAssignmentStatus $targetStatus,
-        OrderStatus $requiredOrderStatus,
+        OrderStatus|array $requiredOrderStatus,
         OrderStatus $targetOrderStatus,
     ): array {
         return DB::transaction(function () use (
@@ -96,9 +97,11 @@ class TransitionDriverAssignmentAction
                 ];
             }
 
+            $allowedOrderStatuses = is_array($requiredOrderStatus) ? $requiredOrderStatus : [$requiredOrderStatus];
+
             if (
                 $assignment->status !== $requiredStatus
-                || $order->status !== $requiredOrderStatus
+                || ! in_array($order->status, $allowedOrderStatuses, true)
             ) {
                 throw new DriverWorkflowConflictException('This delivery step is out of sequence.');
             }
@@ -129,6 +132,10 @@ class TransitionDriverAssignmentAction
 
                 if ($profile !== null) {
                     $profile->increment('completed_deliveries_count');
+                    $profile->update([
+                        'is_available' => true,
+                        'availability_updated_at' => now(),
+                    ]);
                 }
             }
 

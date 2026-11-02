@@ -11,7 +11,8 @@ class SetDriverAvailabilityAction
 {
     public function execute(User $driver, bool $isAvailable): DriverProfile
     {
-        return DB::transaction(function () use ($driver, $isAvailable): DriverProfile {
+        return
+         DB::transaction(function () use ($driver, $isAvailable): DriverProfile {
             $lockedDriver = User::query()->lockForUpdate()->findOrFail($driver->getKey());
             $profile = $lockedDriver->driverProfile()->lockForUpdate()->first();
 

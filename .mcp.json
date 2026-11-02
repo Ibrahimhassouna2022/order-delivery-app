@@ -1,4 +1,4 @@
-{
+﻿{
     "mcpServers": {
         "laravel-boost": {
             "command": "php",
@@ -7,5 +7,6 @@
                 "boost:mcp"
             ]
         }
+         
     }
 }

@@ -58,3 +58,7 @@ Broadcast::channel('driver.{driverUserId}', function (User $user, int $driverUse
 Broadcast::channel('operations', function (User $user): bool {
     return $user->role === UserRole::Admin;
 });
+
+Broadcast::channel('restaurant.{restaurantId}', function (User $user, int $restaurantId): bool {
+    return $user->restaurants()->whereKey($restaurantId)->exists();
+});

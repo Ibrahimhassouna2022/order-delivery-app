@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Api;
 
-use App\Actions\Driver\DispatchClosestDriverAction;
+use App\Actions\Driver\DispatchLeastLoadedDriverAction;
 use App\Enums\DriverAssignmentStatus;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
@@ -32,13 +32,13 @@ class OfferExpiryTest extends TestCase
             'delivery_fee' => '6.500',
         ]);
 
-        $near = $this->createAvailableDriverAt(31.9005, 35.2005);
-        $far = $this->createAvailableDriverAt(31.9500, 35.2500);
+        $leastLoaded = $this->createAvailableDriver(completedDeliveries: 2);
+        $nextDriver = $this->createAvailableDriver(completedDeliveries: 9);
 
-        $assignment = app(DispatchClosestDriverAction::class)->execute($order);
+        $assignment = app(DispatchLeastLoadedDriverAction::class)->execute($order);
 
         $this->assertNotNull($assignment);
-        $this->assertSame($near->id, $assignment->driver_user_id);
+        $this->assertSame($leastLoaded->id, $assignment->driver_user_id);
         $this->assertNotNull($assignment->expires_at);
         Queue::assertPushed(ExpireDriverOfferJob::class);
 
@@ -51,7 +51,7 @@ class OfferExpiryTest extends TestCase
         ]);
         $this->assertDatabaseHas('driver_assignments', [
             'order_id' => $order->id,
-            'driver_user_id' => $far->id,
+            'driver_user_id' => $nextDriver->id,
             'status' => DriverAssignmentStatus::Offered->value,
         ]);
         $this->assertDatabaseHas('orders', [
@@ -68,9 +68,9 @@ class OfferExpiryTest extends TestCase
             'status' => OrderStatus::ReadyForPickup,
             'delivery_fee' => '6.500',
         ]);
-        $this->createAvailableDriverAt(31.9005, 35.2005);
+        $this->createAvailableDriver(completedDeliveries: 1);
 
-        $assignment = app(DispatchClosestDriverAction::class)->execute($order);
+        $assignment = app(DispatchLeastLoadedDriverAction::class)->execute($order);
 
         // The sync queue runs the job immediately; it must no-op until due.
         $this->assertDatabaseHas('driver_assignments', [
@@ -79,18 +79,19 @@ class OfferExpiryTest extends TestCase
         ]);
     }
 
-    private function createAvailableDriverAt(float $latitude, float $longitude): User
+    private function createAvailableDriver(int $completedDeliveries = 0): User
     {
         $driver = User::factory()->create(['role' => UserRole::Driver]);
 
         DriverProfile::factory()->for($driver)->create([
             'is_available' => true,
             'availability_updated_at' => now(),
+            'completed_deliveries_count' => $completedDeliveries,
         ]);
 
         DriverLocation::factory()->for($driver, 'driver')->create([
-            'latitude' => $latitude,
-            'longitude' => $longitude,
+            'latitude' => 31.9000,
+            'longitude' => 35.2000,
             'recorded_at' => now(),
         ]);
 

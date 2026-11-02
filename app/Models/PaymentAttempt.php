@@ -15,6 +15,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'method',
     'provider',
     'status',
+    'proof_path',
+    'reviewed_by_user_id',
+    'reviewed_at',
+    'rejection_reason',
     'amount',
     'currency_code',
     'provider_reference',
@@ -36,6 +40,7 @@ class PaymentAttempt extends Model
             'method' => PaymentMethod::class,
             'status' => PaymentStatus::class,
             'amount' => 'decimal:3',
+            'reviewed_at' => 'datetime',
             'metadata' => 'array',
         ];
     }
@@ -43,5 +48,10 @@ class PaymentAttempt extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    public function reviewedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by_user_id');
     }
 }

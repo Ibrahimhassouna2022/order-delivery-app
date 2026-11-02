@@ -63,6 +63,7 @@ class CustomerOrderTrackingTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.status', OrderStatus::Assigned->value)
             ->assertJsonPath('data.driver.id', $driver->id)
+            ->assertJsonPath('data.driver.phone', '+970 59 888 1234')
             ->assertJsonPath('data.driver.latitude', $driverLocation->latitude)
             ->assertJsonPath('data.driver.longitude', $driverLocation->longitude)
             ->assertJsonPath('data.delivery_location.latitude', $order->deliveryLocation->latitude);

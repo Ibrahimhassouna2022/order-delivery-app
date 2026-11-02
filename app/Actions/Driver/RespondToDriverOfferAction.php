@@ -12,7 +12,10 @@ use Illuminate\Support\Facades\DB;
 
 class RespondToDriverOfferAction
 {
-    public function __construct(private Notifier $notifier) {}
+    public function __construct(
+        private Notifier $notifier,
+        private DispatchLeastLoadedDriverAction $dispatchLeastLoadedDriver,
+    ) {}
 
     /**
      * @return array{assignment: DriverAssignment, changed: bool}
@@ -60,7 +63,12 @@ class RespondToDriverOfferAction
                 ];
             }
 
-            if (! in_array($order->status, [OrderStatus::Placed, OrderStatus::ReadyForPickup], true)) {
+            if (! in_array($order->status, [
+                OrderStatus::Placed,
+                OrderStatus::RestaurantAccepted,
+                OrderStatus::Preparing,
+                OrderStatus::ReadyForPickup,
+            ], true)) {
                 throw new DriverWorkflowConflictException('This order can no longer be accepted.');
             }
 
@@ -105,10 +113,36 @@ class RespondToDriverOfferAction
             ];
         }, attempts: 3);
 
-        if ($accept && $result['changed']) {
-            $this->notifier->orderStatusChanged($result['assignment']->order);
+        if ($result['changed']) {
+            if ($accept) {
+                $this->notifier->orderStatusChanged($result['assignment']->order);
+            } else {
+                $this->reOffer($result['assignment']->order);
+            }
         }
 
         return $result;
+    }
+
+    /**
+     * Re-offer the order to the next available driver excluding those who already declined.
+     */
+    private function reOffer(Order $order): void
+    {
+        if (! in_array($order->status, [
+            OrderStatus::Placed,
+            OrderStatus::RestaurantAccepted,
+            OrderStatus::Preparing,
+            OrderStatus::ReadyForPickup,
+        ], true)) {
+            return;
+        }
+
+        $alreadyOfferedDriverIds = DriverAssignment::query()
+            ->where('order_id', $order->id)
+            ->pluck('driver_user_id')
+            ->all();
+
+        $this->dispatchLeastLoadedDriver->execute($order->refresh(), $alreadyOfferedDriverIds);
     }
 }

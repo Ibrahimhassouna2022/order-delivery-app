@@ -18,7 +18,7 @@ class CreateDriverOfferAction
     public function __construct(private Notifier $notifier) {}
 
     /**
-     * @param  array{driver_user_id: int, distance_meters: int, fare: numeric-string|int|float}  $validatedData
+     * @param  array{driver_user_id: int, distance_meters: int|null, fare: numeric-string|int|float}  $validatedData
      * @return array{assignment: DriverAssignment, created: bool}
      */
     public function execute(Order $order, array $validatedData): array
@@ -27,8 +27,21 @@ class CreateDriverOfferAction
             $result = DB::transaction(function () use ($order, $validatedData): array {
                 $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->getKey());
 
-                if (! in_array($lockedOrder->status, [OrderStatus::Placed, OrderStatus::ReadyForPickup], true)) {
+                if (! in_array($lockedOrder->status, [
+                    OrderStatus::Placed,
+                    OrderStatus::RestaurantAccepted,
+                    OrderStatus::Preparing,
+                    OrderStatus::ReadyForPickup,
+                ], true)) {
                     throw new DriverWorkflowConflictException('This order is not available for dispatch.');
+                }
+
+                $usesBankTransfer = $lockedOrder->paymentAttempts()
+                    ->where('method', \App\Enums\PaymentMethod::BankTransfer)
+                    ->exists();
+
+                if ($usesBankTransfer && $lockedOrder->payment_approved_at === null) {
+                    throw new DriverWorkflowConflictException('The bank transfer must be approved before dispatching this order.');
                 }
 
                 $driver = User::query()->lockForUpdate()->find($validatedData['driver_user_id']);
@@ -118,7 +131,7 @@ class CreateDriverOfferAction
     }
 
     /**
-     * @param  array{driver_user_id: int, distance_meters: int, fare: numeric-string|int|float}  $validatedData
+     * @param  array{driver_user_id: int, distance_meters: int|null, fare: numeric-string|int|float}  $validatedData
      * @return array{assignment: DriverAssignment, created: bool}
      */
     private function resolveExistingOffer(

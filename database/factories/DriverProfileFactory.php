@@ -21,6 +21,7 @@ class DriverProfileFactory extends Factory
     {
         return [
             'user_id' => User::factory()->state(['role' => UserRole::Driver]),
+            'phone' => '+970 59 888 1234',
             'is_available' => false,
             'availability_updated_at' => null,
             'completed_deliveries_count' => 0,

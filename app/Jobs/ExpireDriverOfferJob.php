@@ -10,7 +10,8 @@ use Illuminate\Foundation\Queue\Queueable;
 
 /**
  * Expires a single driver offer after its response window elapses and triggers
- * the re-offer to the next closest driver (FR-016).
+ * the re-offer to the next available driver with the fewest completed
+ * deliveries (FR-016).
  */
 class ExpireDriverOfferJob implements ShouldQueue
 {

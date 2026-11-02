@@ -19,6 +19,13 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'delivery_location_id',
     'type',
     'status',
+    'invoice_number',
+    'payment_approved_at',
+    'fulfillment_type',
+    'delivery_zone_id',
+    'delivery_address',
+    'delivery_phone',
+    'notes',
     'idempotency_key',
     'idempotency_hash',
     'currency_code',
@@ -47,6 +54,7 @@ class Order extends Model
             'delivery_fee' => 'decimal:3',
             'total' => 'decimal:3',
             'placed_at' => 'datetime',
+            'payment_approved_at' => 'datetime',
             'cancelled_at' => 'datetime',
         ];
     }
@@ -64,6 +72,11 @@ class Order extends Model
     public function deliveryLocation(): BelongsTo
     {
         return $this->belongsTo(DeliveryLocation::class);
+    }
+
+    public function deliveryZone(): BelongsTo
+    {
+        return $this->belongsTo(DeliveryZone::class);
     }
 
     public function cancelledBy(): BelongsTo

@@ -3,6 +3,7 @@
 use App\Actions\Notification\BroadcastNotifier;
 use App\Actions\Notification\LogNotifier;
 use App\Actions\Notification\NullNotifier;
+use App\Actions\Payment\BankTransferGateway;
 use App\Actions\Payment\CashOnDeliveryGateway;
 use App\Enums\PaymentMethod;
 
@@ -43,6 +44,7 @@ return [
 
         'gateways' => [
             PaymentMethod::CashOnDelivery->value => CashOnDeliveryGateway::class,
+            PaymentMethod::BankTransfer->value => BankTransferGateway::class,
         ],
     ],
 
@@ -72,15 +74,13 @@ return [
     | Dispatch
     |--------------------------------------------------------------------------
     |
-    | How the nearest available driver is selected and how long an offer stays
-    | open before it is re-offered. Tunable without code changes (FR-016/017).
+    | How long an offer stays open before it is re-offered. Driver selection
+    | is based only on the fewest completed deliveries.
     |
     */
 
     'dispatch' => [
         'offer_window_seconds' => (int) env('DELIVERY_OFFER_WINDOW_SECONDS', 30),
-        'location_freshness_seconds' => (int) env('DELIVERY_LOCATION_FRESHNESS_SECONDS', 60),
-        'candidate_limit' => (int) env('DELIVERY_DISPATCH_CANDIDATE_LIMIT', 50),
     ],
 
     /*

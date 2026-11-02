@@ -7,6 +7,8 @@ use App\Events\DriverOfferReceived;
 use App\Events\DriverPayoutCompleted;
 use App\Events\OrderPlaced;
 use App\Events\OrderStatusChanged;
+use App\Events\PaymentProofSubmitted;
+use App\Events\PaymentReviewed;
 use App\Models\DriverAssignment;
 use App\Models\DriverWalletLedgerEntry;
 use App\Models\Order;
@@ -43,5 +45,15 @@ class BroadcastNotifier implements Notifier
     public function driverPayoutCompleted(DriverWalletLedgerEntry $entry): void
     {
         DriverPayoutCompleted::dispatch($entry);
+    }
+
+    public function paymentProofSubmitted(Order $order): void
+    {
+        PaymentProofSubmitted::dispatch($order);
+    }
+
+    public function paymentReviewed(Order $order, bool $approved, ?string $reason = null): void
+    {
+        PaymentReviewed::dispatch($order, $approved, $reason);
     }
 }
